@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Terrarium Simulator - Non-Absorbent Water Pooling</title>
+    <title>Terrarium Simulator - Sealed Glass Boundaries</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html {
@@ -105,7 +105,7 @@
 
     <div class="ui-panel" id="ui-panel">
         <h1>Terrarium Engine</h1>
-        <div class="subtitle">Non-absorbent pooling & cohesive wet sand.</div>
+        <div class="subtitle">Sealed aquarium glass & fluid containment.</div>
         
         <div class="data-section">
             <div class="data-row">
@@ -132,9 +132,9 @@
             <button class="tool-btn" onclick="terrarium.setTool('knife')" id="tool-knife" style="grid-column: span 2; background-color: #e056fd; color: #fff; border-color: #be2edd;">🔪 Sculpting Blade</button>
             <button class="tool-btn" onclick="terrarium.setTool('sand')" id="tool-sand">⏳ Dry Sand</button>
             <button class="tool-btn" onclick="terrarium.setTool('wetsand')" id="tool-wetsand">🧱 Wet Sand</button>
+            <button class="tool-btn" onclick="terrarium.setTool('stone')" id="tool-stone">🪨 Solid Stone</button>
             <button class="tool-btn" onclick="terrarium.setTool('heat')" id="tool-heat" style="color: #ff7675; border-color: #d63031;">🔥 Heat Ray</button>
             <button class="tool-btn" onclick="terrarium.setTool('chill')" id="tool-chill" style="color: #74b9ff; border-color: #0984e3;">❄️ Freeze Ray</button>
-            <button class="tool-btn" onclick="terrarium.setTool('stone')" id="tool-stone">🪨 Solid Stone</button>
             <button class="tool-btn" onclick="terrarium.setTool('algae')" id="tool-algae">🌿 Algae</button>
             <button class="tool-btn" onclick="terrarium.setTool('erase')" id="tool-erase" style="grid-column: span 2;">🧹 Vacuum / Clear</button>
         </div>
@@ -264,7 +264,7 @@
             initDefaultWorld() {
                 this.grid.fill(EMPTY);
 
-                // Perimeter Glass Boundaries
+                // Sealed Glass Perimeter (Left, Right, Bottom)
                 for (let y = 0; y < this.gh; y++) {
                     this.setCell(0, y, STONE);
                     this.setCell(this.gw - 1, y, STONE);
@@ -273,36 +273,36 @@
                     this.setCell(x, this.gh - 1, STONE);
                 }
                 
-                // Solid, impermeable foundation
+                // Solid wet sand foundation basin
                 for (let x = 1; x < this.gw - 1; x++) {
                     for (let y = this.gh - 22; y < this.gh - 1; y++) {
                         this.setCell(x, y, WET_SAND);
                     }
                 }
                 
-                // Sand dune structure
-                for (let x = Math.floor(this.gw * 0.45); x < Math.floor(this.gw * 0.78); x++) {
-                    const h = Math.floor(Math.sin((x - this.gw * 0.45) / (this.gw * 0.33) * Math.PI) * 28);
+                // Sculpted central bowl/depression for water pooling
+                for (let x = Math.floor(this.gw * 0.4); x < Math.floor(this.gw * 0.7); x++) {
+                    const h = Math.floor(Math.sin((x - this.gw * 0.4) / (this.gw * 0.3) * Math.PI) * 20);
                     for (let y = this.gh - 22 - h; y < this.gh - 22; y++) {
-                        this.setCell(x, y, WET_SAND);
+                        this.setCell(x, y, EMPTY);
                     }
                 }
 
-                // Initial clear pool
-                for (let x = 1; x < Math.floor(this.gw * 0.45); x++) {
-                    for (let y = this.gh - 45; y < this.gh - 22; y++) {
+                // Initial pool inside the basin
+                for (let x = Math.floor(this.gw * 0.42); x < Math.floor(this.gw * 0.68); x++) {
+                    for (let y = this.gh - 35; y < this.gh - 22; y++) {
                         this.setCell(x, y, WATER);
                     }
                 }
 
-                for (let x = 10; x < this.gw - 10; x += 4) {
+                for (let x = 15; x < this.gw - 15; x += 6) {
                     this.setCell(x, this.gh - 23, ALGAE);
                 }
 
-                this.fish = [new Fish(this.gw * 0.22, this.gh - 32)];
-                this.daphnia = [new Daphnia(this.gw * 0.18, this.gh - 30)];
-                this.snails = [new Snail(this.gw * 0.25, this.gh - 23)];
-                this.bugs = [new Bug(this.gw * 0.6, this.gh - 52)];
+                this.fish = [new Fish(this.gw * 0.5, this.gh - 28)];
+                this.daphnia = [new Daphnia(this.gw * 0.48, this.gh - 26)];
+                this.snails = [new Snail(this.gw * 0.45, this.gh - 23)];
+                this.bugs = [new Bug(this.gw * 0.52, this.gh - 45)];
             }
 
             resetEco() {
@@ -374,7 +374,7 @@
                         }
                     }
                 } else {
-                    const r = this.activeTool === 'water' ? 5 : (this.activeTool === 'sand' ? 4 : 3);
+                    const r = this.activeTool === 'water' ? 6 : (this.activeTool === 'sand' ? 4 : 3);
                     for (let dy = -r; dy <= r; dy++) {
                         for (let dx = -r; dx <= r; dx++) {
                             const nx = this.pointerX + dx, ny = this.pointerY + dy;
@@ -411,19 +411,13 @@
                 this.gridNext.set(this.grid);
                 let waterCount = 0;
 
-                const leftToRight = (Math.floor(this.time * 60) % 2 === 0);
-                const xStart = leftToRight ? 1 : this.gw - 2;
-                const xEnd = leftToRight ? this.gw - 1 : 0;
-                const xStep = leftToRight ? 1 : -1;
-
                 for (let y = this.gh - 2; y >= 1; y--) {
-                    for (let x = xStart; x !== xEnd; x += xStep) {
+                    for (let x = 1; x < this.gw - 1; x++) {
                         const idx = y * this.gw + x;
                         const cell = this.grid[idx];
 
                         if (cell === WATER) waterCount++;
 
-                        // Thermal phase transformations
                         if (this.env.temperature <= 0 && cell === WATER && Math.random() < 0.02 * dt) {
                             this.gridNext[idx] = ICE;
                             continue;
@@ -437,7 +431,6 @@
                             continue;
                         }
 
-                        // STEAM
                         if (cell === STEAM) {
                             const above = this.getCell(x, y - 1);
                             if (y <= 2 && Math.random() < 0.05 * dt) {
@@ -455,7 +448,6 @@
                             continue;
                         }
 
-                        // ICE
                         if (cell === ICE) {
                             if (this.getCell(x, y + 1) === EMPTY) {
                                 this.gridNext[idx] = EMPTY;
@@ -464,7 +456,6 @@
                             continue;
                         }
 
-                        // DRY SAND: Falls and displaces water without destroying water cells
                         if (cell === SAND) {
                             const below = this.getCell(x, y + 1);
                             const bl = this.getCell(x - 1, y + 1);
@@ -474,7 +465,6 @@
                                 this.gridNext[idx] = EMPTY;
                                 this.gridNext[(y + 1) * this.gw + x] = SAND;
                             } else if (below === WATER) {
-                                // Direct swap: Sand displaces water upward, turning into saturated wet sand
                                 this.gridNext[idx] = WATER;
                                 this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
                             } else if (x > 1 && bl === EMPTY) {
@@ -491,7 +481,6 @@
                                 this.gridNext[(y + 1) * this.gw + (x + 1)] = WET_SAND;
                             }
                         }
-                        // COHESIVE WET SAND: Fully saturated solid; zero water absorption
                         else if (cell === WET_SAND) {
                             const below = this.getCell(x, y + 1);
                             const bonds = this.getBondCount(x, y);
@@ -505,67 +494,59 @@
                                     this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
                                 }
                             } else if (below === WATER) {
-                                // Dense wet sand sinks through water without deleting it
                                 this.gridNext[idx] = WATER;
                                 this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
                             }
                         }
-                        // FLUID WATER: Perfectly non-absorbent pooling over sand
+                        // SEALED-BOUNDARY HYDROSTATIC FLUID SPREADING
                         else if (cell === WATER) {
                             const below = this.getCell(x, y + 1);
 
-                            // 1. Fall down if empty
                             if (below === EMPTY) {
                                 this.gridNext[idx] = EMPTY;
                                 this.gridNext[(y + 1) * this.gw + x] = WATER;
                             } 
-                            // 2. Surface-only wetting (turns dry sand below to wet sand without consuming this water particle)
                             else if (below === SAND) {
                                 this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
-                                // Water remains active at current index to flow and pool
                             }
-                            // 3. Diagonal falling & lateral equalization
                             else {
-                                const dir = Math.random() < 0.5 ? 1 : -1;
-                                const can1 = (dir === 1 && x < this.gw - 2) || (dir === -1 && x > 1);
-                                const can2 = (dir === 1 && x > 1) || (dir === -1 && x < this.gw - 2);
+                                const leftBelowEmpty = (x > 1 && this.getCell(x - 1, y + 1) === EMPTY);
+                                const rightBelowEmpty = (x < this.gw - 2 && this.getCell(x + 1, y + 1) === EMPTY);
 
-                                if (can1 && this.getCell(x + dir, y + 1) === EMPTY) {
+                                if (leftBelowEmpty) {
                                     this.gridNext[idx] = EMPTY;
-                                    this.gridNext[(y + 1) * this.gw + (x + dir)] = WATER;
-                                } else if (can2 && this.getCell(x - dir, y + 1) === EMPTY) {
+                                    this.gridNext[(y + 1) * this.gw + (x - 1)] = WATER;
+                                } else if (rightBelowEmpty) {
                                     this.gridNext[idx] = EMPTY;
-                                    this.gridNext[(y + 1) * this.gw + (x - dir)] = WATER;
-                                } 
-                                // Multi-cell lateral pressure flow across sand beds
-                                else {
-                                    let moved = false;
-                                    const maxDisp = 5;
-                                    for (let d = 1; d <= maxDisp; d++) {
-                                        const tx = x + (dir * d);
+                                    this.gridNext[(y + 1) * this.gw + (x + 1)] = WATER;
+                                } else {
+                                    // High-pressure horizontal push strictly contained inside glass walls
+                                    let pushed = false;
+                                    const spreadLimit = 8;
+                                    const dir = Math.random() < 0.5 ? 1 : -1;
+
+                                    for (let step = 1; step <= spreadLimit; step++) {
+                                        const tx = x + (dir * step);
                                         if (tx <= 0 || tx >= this.gw - 1) break;
-                                        const target = this.getCell(tx, y);
-
-                                        if (target === EMPTY) {
+                                        if (this.getCell(tx, y) === EMPTY) {
                                             this.gridNext[idx] = EMPTY;
                                             this.gridNext[y * this.gw + tx] = WATER;
-                                            moved = true;
+                                            pushed = true;
                                             break;
-                                        } else if (target !== WATER) {
-                                            break; // Impassable wall or wet sand
+                                        } else if (this.getCell(tx, y) !== WATER) {
+                                            break;
                                         }
                                     }
-                                    if (!moved) {
-                                        for (let d = 1; d <= maxDisp; d++) {
-                                            const tx = x - (dir * d);
-                                            if (tx <= 0 || tx >= this.gw - 1) break;
-                                            const target = this.getCell(tx, y);
 
-                                            if (target === EMPTY) {
+                                    if (!pushed) {
+                                        for (let step = 1; step <= spreadLimit; step++) {
+                                            const tx = x - (dir * step);
+                                            if (tx <= 0 || tx >= this.gw - 1) break;
+                                            if (this.getCell(tx, y) === EMPTY) {
                                                 this.gridNext[idx] = EMPTY;
                                                 this.gridNext[y * this.gw + tx] = WATER;
                                                 break;
-                                            } else if (target !== WATER) {
+                                            } else if (this.getCell(tx, y) !== WATER) {
                                                 break;
                                             }
                                         }
@@ -573,7 +554,6 @@
                                 }
                             }
                         }
-                        // ALGAE
                         else if (cell === ALGAE) {
                             const isSunlit = !(this.forceNight || this.env.isNight);
                             if (isSunlit && this.co2 > 5 && Math.random() < 0.0006 * dt) {
