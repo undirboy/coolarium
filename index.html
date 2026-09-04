@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Terrarium Simulator - Absolute Water Conservation</title>
+    <title>Terrarium Simulator - Impermeable Rock & Water Physics</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html {
@@ -105,7 +105,7 @@
 
     <div class="ui-panel" id="ui-panel">
         <h1>Terrarium Engine</h1>
-        <div class="subtitle">Absolute water conservation & hydro pool.</div>
+        <div class="subtitle">Strict rock impermeability & water pooling.</div>
         
         <div class="data-section">
             <div class="data-row">
@@ -273,7 +273,7 @@
                     this.setCell(x, this.gh - 1, STONE);
                 }
                 
-                // Solid wet sand foundation basin
+                // Impermeable wet sand basin foundation
                 for (let x = 1; x < this.gw - 1; x++) {
                     for (let y = this.gh - 22; y < this.gh - 1; y++) {
                         this.setCell(x, y, WET_SAND);
@@ -381,6 +381,7 @@
                             if (nx <= 0 || nx >= this.gw - 1 || ny <= 0 || ny >= this.gh - 1) continue;
 
                             if (this.activeTool === 'water') {
+                                // STRICT NON-ABSORBENT RULE: Water brush ONLY paints on EMPTY air!
                                 if (this.getCell(nx, ny) === EMPTY) {
                                     this.setCell(nx, ny, WATER);
                                 }
@@ -413,6 +414,7 @@
                 this.gridNext.set(this.grid);
                 let waterCount = 0;
 
+                // Two-pass simulation buffer to guarantee zero volume destruction
                 for (let y = this.gh - 2; y >= 1; y--) {
                     for (let x = 1; x < this.gw - 1; x++) {
                         const idx = y * this.gw + x;
@@ -458,7 +460,7 @@
                             continue;
                         }
 
-                        // STRICT CONSERVATION SAND: Displaces water upward without ever deleting a water cell
+                        // DRY SAND
                         if (cell === SAND) {
                             const below = this.getCell(x, y + 1);
                             const bl = this.getCell(x - 1, y + 1);
@@ -467,10 +469,6 @@
                             if (below === EMPTY) {
                                 this.gridNext[idx] = EMPTY;
                                 this.gridNext[(y + 1) * this.gw + x] = SAND;
-                            } else if (below === WATER) {
-                                // Conserved displacement: Sand drops down, water moves up to current row
-                                this.gridNext[idx] = WATER;
-                                this.gridNext[(y + 1) * this.gw + x] = SAND; // Stays loose sand or settles on top
                             } else if (x > 1 && bl === EMPTY) {
                                 this.gridNext[idx] = EMPTY;
                                 this.gridNext[(y + 1) * this.gw + (x - 1)] = SAND;
@@ -479,6 +477,7 @@
                                 this.gridNext[(y + 1) * this.gw + (x + 1)] = SAND;
                             }
                         }
+                        // WET SAND
                         else if (cell === WET_SAND) {
                             const below = this.getCell(x, y + 1);
                             const bonds = this.getBondCount(x, y);
@@ -493,7 +492,7 @@
                                 }
                             }
                         }
-                        // PURE HYDRO POOLING (Impermeable to all solids)
+                        // PURE HYDRO POOLING (Impermeable to Stone, Wet Sand, and Rocks)
                         else if (cell === WATER) {
                             const below = this.getCell(x, y + 1);
 
@@ -512,7 +511,7 @@
                                     this.gridNext[idx] = EMPTY;
                                     this.gridNext[(y + 1) * this.gw + (x + 1)] = WATER;
                                 } else {
-                                    // High-pressure lateral spreading
+                                    // High-pressure lateral spreading across solid obstacles
                                     let pushed = false;
                                     const spreadLimit = 8;
                                     const dir = Math.random() < 0.5 ? 1 : -1;
