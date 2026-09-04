@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Terrarium Simulator - Saturation & Cohesive Sand</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html {
+            width: 100%; height: 100%; overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #07090e; color: #E0E0E0;
+            overscroll-behavior-y: none;
+        }
+
+        #terrarium-canvas {
+            display: block; width: 100vw; height: 100vh;
+            touch-action: none; cursor: crosshair;
+            image-rendering: pixelated;
+        }
+
+        .ui-panel {
+            position: absolute; top: 16px; left: 16px;
+            width: calc(100% - 32px); max-width: 320px;
+            background-color: #12151d; border: 1px solid #232938;
+            padding: 16px; pointer-events: auto; border-radius: 6px;
+            max-height: calc(100vh - 32px); overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 10;
+        }
+
+        h1 { font-size: 1.1rem; font-weight: 600; color: #FFFFFF; margin-bottom: 2px; }
+        .subtitle { font-size: 0.72rem; color: #7a8296; margin-bottom: 12px; }
+
+        .data-section {
+            background-color: #181d28; padding: 10px; border-radius: 4px; margin-bottom: 12px;
+        }
+        .data-row {
+            display: flex; justify-content: space-between; font-size: 0.72rem;
+            line-height: 1.5; margin-bottom: 2px;
+        }
+        .data-row:last-child { margin-bottom: 0; }
+        .data-label { color: #6b7280; }
+        .data-value { color: #FFFFFF; font-family: ui-monospace, monospace; }
+
+        .section-label {
+            font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px;
+            color: #6b7280; margin-bottom: 6px; margin-top: 10px; font-weight: 600;
+        }
+
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+        button {
+            background-color: #1c2230; color: #D0D5E0; border: 1px solid #293245;
+            padding: 7px 4px; font-size: 0.72rem; font-family: inherit;
+            cursor: pointer; border-radius: 4px; transition: all 0.15s ease;
+            user-select: none; -webkit-user-select: none; text-align: center;
+        }
+        button:active { background-color: #273044; }
+        @media (hover: hover) {
+            button:hover { background-color: #273044; border-color: #3e4c6a; color: #FFF; }
+        }
+
+        button.active-tool {
+            background-color: #FF6B00; color: #000; border-color: #FF6B00; font-weight: 600;
+        }
+        button.speed-btn {
+            background-color: #122434; border-color: #1b3a54; color: #64b5f6; font-weight: 600;
+        }
+
+        .flash-banner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            font-size: clamp(2.5rem, 8vw, 5rem);
+            font-weight: 900;
+            color: #FF6B00;
+            text-shadow: 0 0 20px rgba(255, 107, 0, 0.8), 0 0 40px rgba(255, 107, 0, 0.4);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1000;
+            transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .flash-banner.active {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.1);
+            animation: flashJolt 1.2s forwards;
+        }
+
+        @keyframes flashJolt {
+            0% { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+            15% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+            30% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+            75% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="secret-flash" class="flash-banner">shembdi</div>
+
+    <div class="ui-panel" id="ui-panel">
+        <h1>Terrarium Engine</h1>
+        <div class="subtitle">Saturated substrate, hydro pooling & shear carving.</div>
+        
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Global Temp</span>
+                <span class="data-value" id="val-temp">22°C</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Water / Steam</span>
+                <span class="data-value" id="val-water-vol">0 / 0</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Oxygen ($O_2$)</span>
+                <span class="data-value" id="val-o2">110 ppm</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Cycle</span>
+                <span class="data-value" id="val-cycle">Day</span>
+            </div>
+        </div>
+
+        <div class="section-label">Tools & Modifiers</div>
+        <div class="controls-grid">
+            <button class="tool-btn active-tool" onclick="terrarium.setTool('knife')" id="tool-knife" style="grid-column: span 2; background-color: #e056fd; color: #fff; border-color: #be2edd;">🔪 Sculpting Blade</button>
+            <button class="tool-btn" onclick="terrarium.setTool('water')" id="tool-water" style="grid-column: span 2; background-color: #227093; color: #fff; border-color: #34ace0;">💧 Torrential Water</button>
+            <button class="tool-btn" onclick="terrarium.setTool('sand')" id="tool-sand">⏳ Dry Sand</button>
+            <button class="tool-btn" onclick="terrarium.setTool('wetsand')" id="tool-wetsand">🧱 Wet Sand</button>
+            <button class="tool-btn" onclick="terrarium.setTool('heat')" id="tool-heat" style="color: #ff7675; border-color: #d63031;">🔥 Heat Ray</button>
+            <button class="tool-btn" onclick="terrarium.setTool('chill')" id="tool-chill" style="color: #74b9ff; border-color: #0984e3;">❄️ Freeze Ray</button>
+            <button class="tool-btn" onclick="terrarium.setTool('stone')" id="tool-stone">🪨 Solid Stone</button>
+            <button class="tool-btn" onclick="terrarium.setTool('algae')" id="tool-algae">🌿 Algae</button>
+            <button class="tool-btn" onclick="terrarium.setTool('erase')" id="tool-erase" style="grid-column: span 2;">🧹 Vacuum / Clear</button>
+        </div>
+
+        <div class="section-label">Fauna & Organisms</div>
+        <div class="controls-grid">
+            <button onclick="terrarium.spawnFish()">🐟 Add Fish</button>
+            <button onclick="terrarium.spawnDaphnia()">🦐 Add Daphnia</button>
+            <button onclick="terrarium.spawnSnail()">🐌 Add Snail</button>
+            <button onclick="terrarium.spawnBug()">🐛 Add Bug</button>
+        </div>
+
+        <div class="section-label">Environment</div>
+        <div class="controls-grid">
+            <button onclick="terrarium.adjustTemp(-5)">🥶 Global -5°C</button>
+            <button onclick="terrarium.adjustTemp(5)">🥵 Global +5°C</button>
+            <button onclick="terrarium.toggleNight()" id="btn-night">🌙 Toggle Night</button>
+            <button class="speed-btn" onclick="terrarium.toggleSpeed()" id="btn-speed">⏩ Speed: 1x</button>
+            <button onclick="terrarium.resetEco()" style="grid-column: span 2;">🔄 Reset World</button>
+        </div>
+    </div>
+
+    <canvas id="terrarium-canvas"></canvas>
+
+    <script>
+        const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3, ALGAE = 4, WET_SAND = 5, ICE = 6, STEAM = 7, SILT = 8;
+
+        class DigitalTerrarium {
+            constructor() {
+                this.canvas = document.getElementById('terrarium-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.scale = 4;
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 100));
+
+                this.env = { isNight: false, temperature: 22 };
+                this.forceNight = false;
+
+                this.oxygen = 110;
+                this.co2 = 40;
+
+                this.fish = [];
+                this.daphnia = [];
+                this.snails = [];
+                this.bugs = [];
+                this.gases = [];
+
+                this.time = 0;
+                this.timeScale = 1;
+                this.activeTool = 'knife';
+                this.isPointerDown = false;
+                this.pointerX = 0;
+                this.pointerY = 0;
+                this.prevPointerX = 0;
+                this.prevPointerY = 0;
+
+                this.setupInputs();
+                this.initDefaultWorld();
+            }
+
+            resize() {
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+
+                this.gw = Math.floor(this.width / this.scale);
+                this.gh = Math.floor(this.height / this.scale);
+                this.grid = new Uint8Array(this.gw * this.gh);
+                this.gridNext = new Uint8Array(this.gw * this.gh);
+            }
+
+            setupInputs() {
+                const getCoords = (e) => {
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+                    return {
+                        gx: Math.floor(clientX / this.scale),
+                        gy: Math.floor(clientY / this.scale)
+                    };
+                };
+
+                this.canvas.addEventListener('pointerdown', (e) => {
+                    if (e.target !== this.canvas) return;
+                    this.isPointerDown = true;
+                    const { gx, gy } = getCoords(e);
+                    this.pointerX = gx; this.pointerY = gy;
+                    this.prevPointerX = gx; this.prevPointerY = gy;
+                });
+
+                this.canvas.addEventListener('pointermove', (e) => {
+                    if (!this.isPointerDown) return;
+                    const { gx, gy } = getCoords(e);
+                    this.prevPointerX = this.pointerX;
+                    this.prevPointerY = this.pointerY;
+                    this.pointerX = gx; this.pointerY = gy;
+                });
+
+                window.addEventListener('pointerup', () => this.isPointerDown = false);
+            }
+
+            setTool(t) {
+                this.activeTool = t;
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active-tool'));
+                const el = document.getElementById(`tool-${t}`);
+                if (el) el.classList.add('active-tool');
+            }
+
+            adjustTemp(delta) {
+                this.env.temperature += delta;
+                document.getElementById('val-temp').innerText = `${this.env.temperature}°C`;
+            }
+
+            toggleSpeed() {
+                this.timeScale = this.timeScale === 1 ? 3 : (this.timeScale === 3 ? 8 : 1);
+                document.getElementById('btn-speed').innerText = `⏩ Speed: ${this.timeScale}x`;
+            }
+
+            toggleNight() {
+                this.forceNight = !this.forceNight;
+                document.getElementById('val-cycle').innerText = (this.forceNight || this.env.isNight) ? 'Night' : 'Day';
+                document.getElementById('btn-night').innerText = this.forceNight ? "☀️ Reset Cycle" : "🌙 Force Night";
+            }
+
+            initDefaultWorld() {
+                this.grid.fill(EMPTY);
+
+                for (let y = 0; y < this.gh; y++) {
+                    this.setCell(0, y, STONE);
+                    this.setCell(this.gw - 1, y, STONE);
+                }
+                for (let x = 0; x < this.gw; x++) {
+                    this.setCell(x, this.gh - 1, STONE);
+                }
+                
+                // Wet saturated sand foundation
+                for (let x = 1; x < this.gw - 1; x++) {
+                    for (let y = this.gh - 20; y < this.gh - 1; y++) {
+                        this.setCell(x, y, WET_SAND);
+                    }
+                }
+                
+                // Dunes
+                for (let x = Math.floor(this.gw * 0.38); x < Math.floor(this.gw * 0.72); x++) {
+                    const h = Math.floor(Math.sin((x - this.gw * 0.38) / (this.gw * 0.34) * Math.PI) * 32);
+                    for (let y = this.gh - 20 - h; y < this.gh - 20; y++) {
+                        this.setCell(x, y, WET_SAND);
+                    }
+                }
+
+                // Initial lake
+                for (let x = 1; x < Math.floor(this.gw * 0.38); x++) {
+                    for (let y = this.gh - 45; y < this.gh - 20; y++) {
+                        this.setCell(x, y, WATER);
+                    }
+                }
+
+                for (let x = 10; x < this.gw - 10; x += 4) {
+                    this.setCell(x, this.gh - 21, ALGAE);
+                }
+
+                this.fish = [new Fish(this.gw * 0.18, this.gh - 30)];
+                this.daphnia = [new Daphnia(this.gw * 0.15, this.gh - 28)];
+                this.snails = [new Snail(this.gw * 0.2, this.gh - 21)];
+                this.bugs = [new Bug(this.gw * 0.55, this.gh - 54)];
+            }
+
+            resetEco() {
+                this.daphnia = []; this.fish = []; this.snails = []; this.bugs = [];
+                this.gases = [];
+                this.initDefaultWorld();
+            }
+
+            getCell(x, y) {
+                if (x < 0 || x >= this.gw || y < 0 || y >= this.gh) return STONE;
+                return this.grid[y * this.gw + x];
+            }
+
+            setCell(x, y, val) {
+                if (x >= 0 && x < this.gw && y >= 0 && y < this.gh) {
+                    this.grid[y * this.gw + x] = val;
+                }
+            }
+
+            applyTool(dt) {
+                if (!this.isPointerDown) return;
+
+                if (this.activeTool === 'knife') {
+                    const x0 = this.prevPointerX, y0 = this.prevPointerY;
+                    const x1 = this.pointerX, y1 = this.pointerY;
+                    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+                    const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+                    let err = dx + dy, curX = x0, curY = y0;
+
+                    while (true) {
+                        for (let ox = -1; ox <= 1; ox++) {
+                            for (let oy = -1; oy <= 1; oy++) {
+                                const tx = curX + ox;
+                                const ty = curY + oy;
+                                if (tx <= 0 || tx >= this.gw - 1 || ty <= 0 || ty >= this.gh - 1) continue;
+                                const target = this.getCell(tx, ty);
+
+                                if (target === WET_SAND) {
+                                    this.setCell(tx, ty, EMPTY);
+                                    if (Math.random() < 0.25) {
+                                        const cDir = Math.random() < 0.5 ? 1 : -1;
+                                        if (this.getCell(tx + cDir, ty) === WET_SAND) {
+                                            this.setCell(tx + cDir, ty, SAND);
+                                        }
+                                    }
+                                } else if (target === SAND || target === STONE || target === ALGAE || target === ICE || target === SILT) {
+                                    this.setCell(tx, ty, EMPTY);
+                                }
+                            }
+                        }
+                        if (curX === x1 && curY === y1) break;
+                        const e2 = 2 * err;
+                        if (e2 >= dy) { err += dy; curX += sx; }
+                        if (e2 <= dx) { err += dx; curY += sy; }
+                    }
+                } else if (this.activeTool === 'heat' || this.activeTool === 'chill') {
+                    const r = 5;
+                    for (let dy = -r; dy <= r; dy++) {
+                        for (let dx = -r; dx <= r; dx++) {
+                            const nx = this.pointerX + dx, ny = this.pointerY + dy;
+                            const target = this.getCell(nx, ny);
+                            if (this.activeTool === 'heat') {
+                                if (target === WATER) this.setCell(nx, ny, STEAM);
+                                else if (target === ICE) this.setCell(nx, ny, WATER);
+                                else if (target === WET_SAND) this.setCell(nx, ny, SAND);
+                            } else {
+                                if (target === WATER) this.setCell(nx, ny, ICE);
+                                else if (target === STEAM) this.setCell(nx, ny, WATER);
+                            }
+                        }
+                    }
+                } else {
+                    const r = this.activeTool === 'water' ? 6 : (this.activeTool === 'sand' ? 4 : 3);
+                    for (let dy = -r; dy <= r; dy++) {
+                        for (let dx = -r; dx <= r; dx++) {
+                            const nx = this.pointerX + dx;
+                            const ny = this.pointerY + dy;
+                            if (nx <= 0 || nx >= this.gw - 1 || ny <= 0 || ny >= this.gh - 1) continue;
+
+                            if (this.activeTool === 'sand') {
+                                if (this.getCell(nx, ny) === EMPTY || this.getCell(nx, ny) === WATER) this.setCell(nx, ny, SAND);
+                            } else if (this.activeTool === 'water') {
+                                if (this.getCell(nx, ny) === EMPTY) this.setCell(nx, ny, WATER);
+                            } else if (this.activeTool === 'wetsand') {
+                                this.setCell(nx, ny, WET_SAND);
+                            } else if (this.activeTool === 'stone') {
+                                this.setCell(nx, ny, STONE);
+                            } else if (this.activeTool === 'algae') {
+                                this.setCell(nx, ny, ALGAE);
+                            } else if (this.activeTool === 'erase') {
+                                this.setCell(nx, ny, EMPTY);
+                            }
+                        }
+                    }
+                }
+            }
+
+            getBondCount(x, y) {
+                let bonds = 0;
+                if (this.getCell(x - 1, y) === WET_SAND) bonds++;
+                if (this.getCell(x + 1, y) === WET_SAND) bonds++;
+                if (this.getCell(x, y - 1) === WET_SAND) bonds++;
+                if (this.getCell(x, y + 1) === WET_SAND) bonds++;
+                return bonds;
+            }
+
+            updateGrid(dt) {
+                this.gridNext.set(this.grid);
+                let waterCount = 0;
+                let vaporCount = 0;
+
+                for (let y = this.gh - 2; y >= 1; y--) {
+                    for (let x = 1; x < this.gw - 1; x++) {
+                        const idx = y * this.gw + x;
+                        const cell = this.grid[idx];
+
+                        if (cell === WATER) waterCount++;
+                        if (cell === STEAM) vaporCount++;
+
+                        // Temperature
+                        if (this.env.temperature <= 0 && cell === WATER && Math.random() < 0.02 * dt) {
+                            this.gridNext[idx] = ICE;
+                            continue;
+                        }
+                        if (this.env.temperature >= 40 && cell === ICE && Math.random() < 0.04 * dt) {
+                            this.gridNext[idx] = WATER;
+                            continue;
+                        }
+                        if (this.env.temperature >= 100 && cell === WATER && Math.random() < 0.05 * dt) {
+                            this.gridNext[idx] = STEAM;
+                            continue;
+                        }
+
+                        // STEAM
+                        if (cell === STEAM) {
+                            const above = this.getCell(x, y - 1);
+                            if (y <= 2 && Math.random() < 0.05 * dt) {
+                                this.gridNext[idx] = WATER;
+                            } else if (above === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y - 1) * this.gw + x] = STEAM;
+                            } else {
+                                const dir = Math.random() < 0.5 ? 1 : -1;
+                                const canMoveX = (dir === 1 && x < this.gw - 2) || (dir === -1 && x > 1);
+                                if (canMoveX && this.getCell(x + dir, y - 1) === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y - 1) * this.gw + (x + dir)] = STEAM;
+                                } else if (canMoveX && this.getCell(x + dir, y) === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[y * this.gw + (x + dir)] = STEAM;
+                                }
+                            }
+                            continue;
+                        }
+
+                        // ICE
+                        if (cell === ICE) {
+                            const below = this.getCell(x, y + 1);
+                            if (below === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y + 1) * this.gw + x] = ICE;
+                            }
+                            continue;
+                        }
+
+                        // DRY SAND: Only surface contacts moisten; does NOT continually consume standing water
+                        if (cell === SAND) {
+                            const below = this.getCell(x, y + 1);
+                            const bl = this.getCell(x - 1, y + 1);
+                            const br = this.getCell(x + 1, y + 1);
+
+                            // Sinking through water (sand is denser than water)
+                            if (below === WATER) {
+                                this.gridNext[idx] = WATER;
+                                this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
+                            } else if (below === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y + 1) * this.gw + x] = SAND;
+                            } else if (x > 1 && bl === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y + 1) * this.gw + (x - 1)] = SAND;
+                            } else if (x < this.gw - 2 && br === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y + 1) * this.gw + (x + 1)] = SAND;
+                            } else if (x > 1 && bl === WATER) {
+                                this.gridNext[idx] = WATER;
+                                this.gridNext[(y + 1) * this.gw + (x - 1)] = WET_SAND;
+                            } else if (x < this.gw - 2 && br === WATER) {
+                                this.gridNext[idx] = WATER;
+                                this.gridNext[(y + 1) * this.gw + (x + 1)] = WET_SAND;
+                            }
+                        }
+                        // SATURATED WET SAND: Fully saturated substrate; impervious to water absorption
+                        else if (cell === WET_SAND) {
+                            const below = this.getCell(x, y + 1);
+                            const left = this.getCell(x - 1, y);
+                            const right = this.getCell(x + 1, y);
+                            const bonds = this.getBondCount(x, y);
+
+                            if (below === EMPTY) {
+                                if (bonds <= 1) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + x] = SAND;
+                                } else if (Math.random() < 0.2 * dt) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
+                                }
+                            } else if (below === WATER) {
+                                // Sinks through water because wet sand is denser than fluid
+                                this.gridNext[idx] = WATER;
+                                this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
+                            } else if (below !== EMPTY && below !== WATER) {
+                                const bl = this.getCell(x - 1, y + 1);
+                                const br = this.getCell(x + 1, y + 1);
+
+                                if (x > 1 && left === EMPTY && bl === EMPTY && bonds <= 1 && Math.random() < 0.03 * dt) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + (x - 1)] = (Math.random() < 0.5 ? SAND : WET_SAND);
+                                } else if (x < this.gw - 2 && right === EMPTY && br === EMPTY && bonds <= 1 && Math.random() < 0.03 * dt) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + (x + 1)] = (Math.random() < 0.5 ? SAND : WET_SAND);
+                                }
+                            }
+                        }
+                        // SILT
+                        else if (cell === SILT) {
+                            const below = this.getCell(x, y + 1);
+                            if (below === EMPTY || below === WATER) {
+                                this.gridNext[idx] = below;
+                                this.gridNext[(y + 1) * this.gw + x] = SILT;
+                            }
+                        }
+                        // WATER: Strictly preserves volume; pools on wet sand without being absorbed
+                        else if (cell === WATER) {
+                            const below = this.getCell(x, y + 1);
+
+                            // Falls down if open space exists
+                            if (below === EMPTY) {
+                                this.gridNext[idx] = EMPTY;
+                                this.gridNext[(y + 1) * this.gw + x] = WATER;
+                            } 
+                            // Only wets dry sand on direct impact; does NOT get absorbed by saturated wet sand
+                            else if (below === SAND && Math.random() < 0.15) {
+                                this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
+                            }
+                            else {
+                                // Horizontal lateral leveling
+                                const dir = Math.random() < 0.5 ? 1 : -1;
+                                const canMoveDir = (dir === 1 && x < this.gw - 2) || (dir === -1 && x > 1);
+                                const canMoveOpp = (dir === 1 && x > 1) || (dir === -1 && x < this.gw - 2);
+
+                                const d1 = canMoveDir ? this.getCell(x + dir, y + 1) : STONE;
+                                const d2 = canMoveOpp ? this.getCell(x - dir, y + 1) : STONE;
+                                const s1 = canMoveDir ? this.getCell(x + dir, y) : STONE;
+                                const s2 = canMoveOpp ? this.getCell(x - dir, y) : STONE;
+
+                                if (d1 === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + (x + dir)] = WATER;
+                                } else if (d2 === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[(y + 1) * this.gw + (x - dir)] = WATER;
+                                } else if (s1 === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[y * this.gw + (x + dir)] = WATER;
+                                } else if (s2 === EMPTY) {
+                                    this.gridNext[idx] = EMPTY;
+                                    this.gridNext[y * this.gw + (x - dir)] = WATER;
+                                }
+                            }
+                        }
+                        // ALGAE
+                        else if (cell === ALGAE) {
+                            const isSunlit = !(this.forceNight || this.env.isNight);
+                            if (isSunlit && this.co2 > 5 && Math.random() < 0.0006 * dt) {
+                                const nx = x + (Math.random() < 0.5 ? 1 : -1);
+                                const ny = y + (Math.random() < 0.5 ? 1 : -1);
+                                if (nx > 0 && nx < this.gw - 1 && ny > 0 && ny < this.gh - 1) {
+                                    if (this.getCell(nx, ny) === WATER) {
+                                        this.gridNext[ny * this.gw + nx] = ALGAE;
+                                        this.co2 -= 0.5;
+                                        this.oxygen += 0.5;
+                                        if (Math.random() < 0.2) this.gases.push(new GasBubble(x, y, 'O2'));
+                                    }
+                                }
+                            } else if (this.oxygen < 20 && Math.random() < 0.0005 * dt) {
+                                this.gridNext[idx] = SILT;
+                            }
+                        }
+                    }
+                }
+                this.grid.set(this.gridNext);
+                document.getElementById('val-water-vol').innerText = `${waterCount} / ${vaporCount}`;
+            }
+
+            spawnDaphnia() { this.daphnia.push(new Daphnia(this.gw / 2, this.gh / 2)); }
+            spawnFish() { this.fish.push(new Fish(this.gw / 2, this.gh / 2)); }
+            spawnSnail() { this.snails.push(new Snail(this.gw / 2, this.gh - 20)); }
+            spawnBug() { this.bugs.push(new Bug(this.gw / 2, this.gh - 20)); }
+
+            update() {
+                const dt = this.timeScale;
+                this.time += 0.016 * dt;
+
+                this.applyTool(dt);
+                this.updateGrid(dt);
+
+                for (let i = this.gases.length - 1; i >= 0; i--) {
+                    const g = this.gases[i];
+                    g.update(this, dt);
+                    if (!g.active) this.gases.splice(i, 1);
+                }
+
+                this.daphnia.forEach(d => d.update(this, dt));
+                this.snails.forEach(s => s.update(this, dt));
+                this.fish.forEach(f => f.update(this, dt));
+                this.bugs.forEach(b => b.update(this, dt));
+
+                this.daphnia = this.daphnia.filter(d => d.alive);
+                this.fish = this.fish.filter(f => f.alive);
+
+                document.getElementById('val-o2').innerText = `${Math.floor(this.oxygen)} ppm`;
+            }
+
+            draw() {
+                const isNight = this.forceNight || this.env.isNight;
+                this.ctx.fillStyle = isNight ? '#05070a' : '#0e141f';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+
+                const imgData = this.ctx.createImageData(this.gw, this.gh);
+                const data = imgData.data;
+
+                for (let i = 0; i < this.gw * this.gh; i++) {
+                    const cell = this.grid[i];
+                    const idx = i * 4;
+                    if (cell === SAND) {
+                        data[idx] = 215; data[idx+1] = 185; data[idx+2] = 135; data[idx+3] = 255;
+                    } else if (cell === WET_SAND) {
+                        data[idx] = 142; data[idx+1] = 112; data[idx+2] = 74; data[idx+3] = 255;
+                    } else if (cell === WATER) {
+                        data[idx] = 45; data[idx+1] = 125; data[idx+2] = 215; data[idx+3] = isNight ? 140 : 180;
+                    } else if (cell === ICE) {
+                        data[idx] = 200; data[idx+1] = 230; data[idx+2] = 255; data[idx+3] = 230;
+                    } else if (cell === STEAM) {
+                        data[idx] = 230; data[idx+1] = 240; data[idx+2] = 250; data[idx+3] = 90;
+                    } else if (cell === STONE) {
+                        data[idx] = 70; data[idx+1] = 78; data[idx+2] = 90; data[idx+3] = 255;
+                    } else if (cell === ALGAE) {
+                        data[idx] = 65; data[idx+1] = 165; data[idx+2] = 75; data[idx+3] = 255;
+                    } else if (cell === SILT) {
+                        data[idx] = 48; data[idx+1] = 40; data[idx+2] = 32; data[idx+3] = 255;
+                    }
+                }
+
+                createImageBitmap(imgData).then(bmp => {
+                    this.ctx.drawImage(bmp, 0, 0, this.width, this.height);
+                });
+
+                this.ctx.save();
+                this.ctx.scale(this.scale, this.scale);
+
+                this.gases.forEach(g => g.draw(this.ctx));
+                this.daphnia.forEach(d => d.draw(this.ctx));
+                this.snails.forEach(s => s.draw(this.ctx));
+                this.bugs.forEach(b => b.draw(this.ctx));
+                this.fish.forEach(f => f.draw(this.ctx));
+
+                if (this.isPointerDown && this.activeTool === 'knife') {
+                    this.ctx.fillStyle = '#e056fd';
+                    this.ctx.fillRect(this.pointerX - 1, this.pointerY - 1, 2, 2);
+                }
+
+                this.ctx.restore();
+            }
+
+            loop() {
+                this.update();
+                this.draw();
+                requestAnimationFrame(() => this.loop());
+            }
+        }
+
+        class GasBubble {
+            constructor(x, y, type) {
+                this.x = x; this.y = y;
+                this.type = type;
+                this.active = true;
+            }
+            update(sim, dt) {
+                this.y -= 0.6 * dt;
+                this.x += (Math.random() - 0.5) * 0.3;
+                const cell = sim.getCell(Math.floor(this.x), Math.floor(this.y));
+                if (cell === EMPTY || this.y < 0) this.active = false;
+            }
+            draw(ctx) {
+                ctx.fillStyle = this.type === 'O2' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(160, 200, 255, 0.5)';
+                ctx.fillRect(this.x, this.y, 1.2, 1.2);
+            }
+        }
+
+        class Daphnia {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.vx = 0; this.vy = 0;
+                this.alive = true;
+            }
+            update(sim, dt) {
+                if (Math.random() < 0.08 * dt) {
+                    this.vx = (Math.random() - 0.5) * 1.5;
+                    this.vy = (Math.random() - 0.6) * 1.5;
+                }
+                this.vx *= 0.85; this.vy *= 0.85;
+                this.x += this.vx * dt; this.y += this.vy * dt;
+
+                const gx = Math.floor(this.x), gy = Math.floor(this.y);
+                if (sim.getCell(gx, gy) === ALGAE) {
+                    sim.setCell(gx, gy, WATER);
+                    sim.co2 += 0.3;
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#ff7043';
+                ctx.fillRect(this.x, this.y, 1.5, 1.5);
+            }
+        }
+
+        class Fish {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.vx = 0.6; this.vy = 0;
+                this.alive = true;
+            }
+            update(sim, dt) {
+                let target = null;
+                let minDist = 35;
+                sim.daphnia.forEach(d => {
+                    const dist = Math.hypot(d.x - this.x, d.y - this.y);
+                    if (dist < minDist) { minDist = dist; target = d; }
+                });
+
+                if (target) {
+                    const a = Math.atan2(target.y - this.y, target.x - this.x);
+                    this.vx += Math.cos(a) * 0.12 * dt;
+                    this.vy += Math.sin(a) * 0.12 * dt;
+                    if (minDist < 3) {
+                        target.alive = false;
+                        sim.co2 += 1.2;
+                        sim.gases.push(new GasBubble(this.x, this.y, 'CO2'));
+                    }
+                } else {
+                    this.vx += (Math.random() - 0.5) * 0.08;
+                    this.vy += (Math.random() - 0.5) * 0.08;
+                }
+
+                this.vx = Math.max(-1.2, Math.min(1.2, this.vx));
+                this.vy = Math.max(-0.6, Math.min(0.6, this.vy));
+                this.x += this.vx * dt; this.y += this.vy * dt;
+
+                if (sim.getCell(Math.floor(this.x + this.vx * 2), Math.floor(this.y)) !== WATER) this.vx *= -1;
+                if (sim.getCell(Math.floor(this.x), Math.floor(this.y + this.vy * 2)) !== WATER) this.vy *= -1;
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#FF6B00';
+                ctx.fillRect(this.x - 2, this.y - 1, 5, 2.5);
+                ctx.fillRect(this.x - 3, this.y - (this.vx > 0 ? 0 : 0.5), 1.5, 1.5);
+            }
+        }
+
+        class Snail {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.vx = 0.15;
+            }
+            update(sim, dt) {
+                const gx = Math.floor(this.x + this.vx);
+                const gy = Math.floor(this.y);
+                const below = sim.getCell(gx, gy + 1);
+
+                if (below === SAND || below === WET_SAND || below === STONE || below === ICE || below === SILT) {
+                    this.x += this.vx * dt;
+                    if (sim.getCell(gx, gy) === ALGAE) {
+                        sim.setCell(gx, gy, EMPTY);
+                        sim.co2 += 0.4;
+                    }
+                } else {
+                    this.vx *= -1;
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#8d6e63';
+                ctx.fillRect(this.x, this.y, 3, 2);
+            }
+        }
+
+        class Bug {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.vx = 0.35;
+            }
+            update(sim, dt) {
+                const gx = Math.floor(this.x + this.vx);
+                const gy = Math.floor(this.y);
+                const below = sim.getCell(gx, gy + 1);
+                if (below === SAND || below === WET_SAND || below === STONE || below === ICE || below === SILT) {
+                    this.x += this.vx * dt;
+                } else {
+                    this.vx *= -1;
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#78909c';
+                ctx.fillRect(this.x, this.y, 2, 1.5);
+            }
+        }
+
+        // Keystroke Triggers: "swara" -> "shembdi", "anuj" -> "raavi"
+        (() => {
+            let keyBuffer = '';
+            const triggers = {
+                'swara': 'shembdi',
+                'anuj': 'raavi'
+            };
+            const maxLen = 5;
+            const flashElem = document.getElementById('secret-flash');
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key.length !== 1) return;
+
+                keyBuffer = (keyBuffer + e.key.toLowerCase()).slice(-maxLen);
+
+                for (const [word, output] of Object.entries(triggers)) {
+                    if (keyBuffer.endsWith(word)) {
+                        keyBuffer = '';
+                        flashElem.innerText = output;
+                        flashElem.classList.remove('active');
+                        void flashElem.offsetWidth;
+                        flashElem.classList.add('active');
+
+                        setTimeout(() => {
+                            flashElem.classList.remove('active');
+                        }, 1250);
+                        break;
+                    }
+                }
+            });
+        })();
+
+        const terrarium = new DigitalTerrarium();
+        terrarium.loop();
+    </script>
+</body>
+</html>
