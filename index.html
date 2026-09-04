@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Terrarium Simulator - Sealed Glass Boundaries</title>
+    <title>Terrarium Simulator - Pure Hydro Basin</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html {
@@ -105,7 +105,7 @@
 
     <div class="ui-panel" id="ui-panel">
         <h1>Terrarium Engine</h1>
-        <div class="subtitle">Sealed aquarium glass & fluid containment.</div>
+        <div class="subtitle">Sealed aquarium glass & non-absorbent fluid.</div>
         
         <div class="data-section">
             <div class="data-row">
@@ -264,7 +264,7 @@
             initDefaultWorld() {
                 this.grid.fill(EMPTY);
 
-                // Sealed Glass Perimeter (Left, Right, Bottom)
+                // Sealed Glass Walls (Left, Right, Bottom)
                 for (let y = 0; y < this.gh; y++) {
                     this.setCell(0, y, STONE);
                     this.setCell(this.gw - 1, y, STONE);
@@ -280,7 +280,7 @@
                     }
                 }
                 
-                // Sculpted central bowl/depression for water pooling
+                // Sculpted central bowl for water pooling
                 for (let x = Math.floor(this.gw * 0.4); x < Math.floor(this.gw * 0.7); x++) {
                     const h = Math.floor(Math.sin((x - this.gw * 0.4) / (this.gw * 0.3) * Math.PI) * 20);
                     for (let y = this.gh - 22 - h; y < this.gh - 22; y++) {
@@ -288,7 +288,7 @@
                     }
                 }
 
-                // Initial pool inside the basin
+                // Initial clear pool inside the basin
                 for (let x = Math.floor(this.gw * 0.42); x < Math.floor(this.gw * 0.68); x++) {
                     for (let y = this.gh - 35; y < this.gh - 22; y++) {
                         this.setCell(x, y, WATER);
@@ -380,10 +380,13 @@
                             const nx = this.pointerX + dx, ny = this.pointerY + dy;
                             if (nx <= 0 || nx >= this.gw - 1 || ny <= 0 || ny >= this.gh - 1) continue;
 
-                            if (this.activeTool === 'sand') {
+                            if (this.activeTool === 'water') {
+                                // STRICT NON-ABSORBENT RULE: Water brush ONLY paints on EMPTY air!
+                                if (this.getCell(nx, ny) === EMPTY) {
+                                    this.setCell(nx, ny, WATER);
+                                }
+                            } else if (this.activeTool === 'sand') {
                                 if (this.getCell(nx, ny) === EMPTY) this.setCell(nx, ny, SAND);
-                            } else if (this.activeTool === 'water') {
-                                if (this.getCell(nx, ny) === EMPTY) this.setCell(nx, ny, WATER);
                             } else if (this.activeTool === 'wetsand') {
                                 this.setCell(nx, ny, WET_SAND);
                             } else if (this.activeTool === 'stone') {
@@ -498,7 +501,7 @@
                                 this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
                             }
                         }
-                        // SEALED-BOUNDARY HYDROSTATIC FLUID SPREADING
+                        // PURE HYDRO POOLING (Impermeable to Wet Sand Substrate)
                         else if (cell === WATER) {
                             const below = this.getCell(x, y + 1);
 
@@ -506,9 +509,6 @@
                                 this.gridNext[idx] = EMPTY;
                                 this.gridNext[(y + 1) * this.gw + x] = WATER;
                             } 
-                            else if (below === SAND) {
-                                this.gridNext[(y + 1) * this.gw + x] = WET_SAND;
-                            }
                             else {
                                 const leftBelowEmpty = (x > 1 && this.getCell(x - 1, y + 1) === EMPTY);
                                 const rightBelowEmpty = (x < this.gw - 2 && this.getCell(x + 1, y + 1) === EMPTY);
@@ -520,7 +520,7 @@
                                     this.gridNext[idx] = EMPTY;
                                     this.gridNext[(y + 1) * this.gw + (x + 1)] = WATER;
                                 } else {
-                                    // High-pressure horizontal push strictly contained inside glass walls
+                                    // High-pressure lateral spreading
                                     let pushed = false;
                                     const spreadLimit = 8;
                                     const dir = Math.random() < 0.5 ? 1 : -1;
